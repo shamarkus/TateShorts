@@ -206,7 +206,7 @@ def transcribe_file(speech_file):
 	response = client.recognize(config=config, audio=audio)
 	response = json.loads(MessageToJson(response._pb))
 	
-	makeSubtitlesFile(response)
+	return makeSubtitlesFile(response)
 
 def makeSubtitlesFile(response):
 	entries = []
@@ -262,7 +262,9 @@ downloadBackground(URLs)
 
 #@title URL Input
 # https://odysee.com/@tatespeech:c/superbike-vs-supercar:1
-link_url = input("Enter Odysee Link URL: ")
+#link_url = input("Enter Odysee Link URL: ")
+link_url = "https://odysee.com/@tatespeech:c/superbike-vs-supercar:1"
+
 backgroundPath = './Forza-Horizon-4-DRIVING-LIKE-A-BOSS!!-1876HP-RTR-Mustang.mp4'
 
 #@title User Actions From URL Input
@@ -277,5 +279,6 @@ getDOMTree(link_url,video_name)
 # Returns filepath of the video that contains the conjoined background .mp4 + Tate .mp4
 clipDir, clipPath = cropVideo(video_name,backgroundPath)
 
-generateVisualSubtitles(clipPath, transcribe_file(mp4ToAudio(clipDir)))
+transcribe_file(mp4ToAudio(clipDir))
 
+print("VIDEO PATH: " + clipPath)
