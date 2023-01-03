@@ -8,31 +8,27 @@ Original file is located at
 
 # Imports
 """
-
-!pip install youtube_dl
-!pip install pytube
-!pip install deepspeech
-!pip install ffmpeg
-!pip install srt
-
-!git clone https://github.com/XniceCraft/ffmpeg-colab.git
-!chmod +x ./ffmpeg-colab/install
-!./ffmpeg-colab/install
-
-import requests
 import os, sys
+import requests
 import urllib.request
 import re
 import subprocess
 import shlex
 import random
-import deepspeech
 import ffmpeg
 import srt
-import numpy as np
+import datetime
+import json
+import math
+import google.auth
+import io
 
-from datetime import datetime
 from pytube import YouTube
+from google.protobuf.json_format import MessageToJson
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from apiclient.discovery import build
+from google.cloud import speech
 
 """# Downloading"""
 
@@ -40,12 +36,12 @@ def downloadBackground(URLs):
   for url in URLs:
     yt = YouTube(url)
     title = yt.title.replace(" ","-")
-    if os.path.exists('/content/' + title + '.mp4'):
+    if os.path.exists('./' + title + '.mp4'):
       print("Background " + title + " --> Already Downloaded")
     else:
       video_stream = yt.streams.filter(file_extension='mp4').get_highest_resolution()
       video_stream.download(filename=title + '.mp4')
-      getMutedBackground('/content/' + title + '.mp4')   
+      getMutedBackground('./' + title + '.mp4')   
       print("Background " + title + " --> Successfully Downloaded")
 
 def downloadMP4FromURL(video_url,video_name):
@@ -55,7 +51,7 @@ def downloadMP4FromURL(video_url,video_name):
   # Check the status code of the response
   if response.status_code == 200:
     # Write the content of the response to a file
-    dir = '/content/' + video_name.split('.mp4')[0]
+    dir = './' + video_name.split('.mp4')[0]
     os.makedirs(dir)
     with open(dir + '/' + video_name, 'wb') as f:
         f.write(response.content)
@@ -65,7 +61,7 @@ def downloadMP4FromURL(video_url,video_name):
 
 def getDOMTree(link_url,video_name):
 
-  if os.path.exists('/content/' + video_name.split('.mp4')[0]):
+  if os.path.exists('./' + video_name.split('.mp4')[0]):
     print('Video Already Downloaded')
   else:
     #HAVE TO MASK AS USER SO DOMAIN DOESN'T RECOGNIZE WEB SCRAPER
@@ -99,7 +95,7 @@ def fix_timestamp(timestamp):
 
 def cropVideo(video_name, backgroundPath):
 
-  outputPath = '/content/' + video_name.split('.mp4')[0]
+  outputPath = './' + video_name.split('.mp4')[0]
   inputFile = outputPath + '/' + video_name
 
   startTime = input("Enter Start Timestamp: ")
@@ -110,26 +106,23 @@ def cropVideo(video_name, backgroundPath):
   endTime = fix_timestamp(endTime)
 
   # 20 represents the quality/filesize ratio. 0 is best quality. 51 is worst quality.
-  command = ['ffmpeg', '-i', inputFile, '-copyinkf', '-ss', startTime, '-to', endTime, '-vf', 'scale=1080:960,setsar=9/16', '-c:v', 'libx264', '-crf', '20', '-c:a', 'copy', f'{outputPath}/tateClip.mp4']
+  command = ['ffmpeg', '-i', inputFile, '-copyinkf', '-ss', startTime, '-to', endTime, '-vf', 'scale=1080:960,setsar=9/16', '-c:v', 'libx264', '-crf', '20', '-c:a', 'copy','-y', f'{outputPath}/tateClip.mp4']
   subprocess.run(command)
 
-  backgroundLength = getSeconds(getVideoLength(backgroundPath)[0])
-  vidLength = getSeconds(getVideoLength(f'{outputPath}/tateClip.mp4')[0])
+  backgroundLength = getVideoLength(backgroundPath)
+  vidLength = getVideoLength(f'{outputPath}/tateClip.mp4')
   
   backgroundStart = getRandomNumber(30, backgroundLength - vidLength - 30)
 
-  command = ['ffmpeg', '-i', backgroundPath, '-copyinkf', '-ss', getHHMMSS(backgroundStart), '-to', getHHMMSS(backgroundStart + vidLength), '-vf', 'scale=1080:960,setsar=9/16', '-c:v', 'libx264', '-crf', '20', '-c:a', 'copy', '/content/background.mp4']
+  command = ['ffmpeg', '-i', backgroundPath, '-copyinkf', '-ss', getHHMMSS(backgroundStart), '-to', getHHMMSS(backgroundStart + vidLength), '-vf', 'scale=1080:960,setsar=9/16', '-c:v', 'libx264', '-crf', '20', '-c:a', 'copy','-y', './background.mp4']
   subprocess.run(command)
 
-  #ffmpeg -i top.mp4 -i bottom.mp4 -filter_complex "[0:v]scale=iw:ih/2[top];[1:v]scale=iw:ih/2[bottom];[top][bottom]vstack,setdar=9/16,format=yuv420p" -c:v libx264 -crf 20 output.mp4
-
-  # Fix this
   command = [
       "ffmpeg",
       "-i",
       f'{outputPath}/tateClip.mp4',
       "-i",
-      '/content/background.mp4',
+      './background.mp4',
       "-filter_complex",
       "[0:v]scale=iw:ih/2[top];[1:v]scale=iw:ih/2[bottom];[top][bottom]vstack,setdar=9/16,format=yuv420p",
       "-c:v",
@@ -141,41 +134,123 @@ def cropVideo(video_name, backgroundPath):
   subprocess.run(command)
 
   # os.remove(f'{outputPath}/tateClip.mp4')
-  os.remove('/content/background.mp4')
+  os.remove('./background.mp4')
 
   return outputPath, f'{outputPath}/{fileName}'
 
 def getVideoLength(video_path):
-  command = "ffmpeg -i " + video_path + " 2>&1 | grep 'Duration' | cut -d ' ' -f 4 | sed s/,//"
-  try:
-    stdout = !{command}
-    return stdout
-  except:
-    print("getVideoLength failed")
-  # Get the duration of the video from the command output
+	command = ['ffprobe', '-v', 'fatal', '-show_entries', 'stream=width,height,r_frame_rate,duration', '-of', 'default=noprint_wrappers=1:nokey=1', video_path]
+	ffmpeg = subprocess.Popen(command, stderr=subprocess.PIPE,stdout = subprocess.PIPE )
+	out, err = ffmpeg.communicate()
+
+	if err:
+		print(err)
+	
+	return int((out.decode().split('\n')[3]).split('.')[0])
 
 def getMutedBackground(video_path):
-  muted_video_path = '/content/muted.mp4'
+  muted_video_path = './muted.mp4'
   command = "ffmpeg -i " + video_path + " -c copy -an -y " + muted_video_path
   print(command)
   try:
-    !{command}
+    os.system(command)
     os.remove(video_path)
     os.rename(muted_video_path,video_path)  
   except:
     print("getMutedBackground failed")
 
 def getSeconds(timestamp):
-  dt = datetime.strptime(timestamp, "%H:%M:%S.%f")
+  dt = datetime.datetime.strptime(timestamp, "%H:%M:%S.%f")
   return dt.hour*3600 + dt.minute*60 + dt.second
 
 def getHHMMSS(timestamp):
-  dt = datetime.utcfromtimestamp(int(timestamp))
+  dt = datetime.datetime.utcfromtimestamp(int(timestamp))
   return dt.strftime('%H:%M:%S') + '.000'
 
 def getRandomNumber(a, b):
   # Get a random integer between a and b (inclusive)
   return random.randint(a, b)
+
+"""# Audio Transcription"""
+def getWordTime(secondsTime):
+	return float(secondsTime.split('s')[0])
+
+def mp4ToAudio(clipDir):
+	command = "ffmpeg -i {} -c:a flac -y {}".format(clipDir + '/tateClip.mp4',clipDir + '/tateSound.flac')
+	try:
+		ret = subprocess.call(command, shell=True)
+		print("Extracted audio to {}/{}".format(clipDir,'tateSound.flac'))
+	except Exception as e:
+		print("Error: ", str(e))
+		exit(1)
+
+	return clipDir + '/tateSound.flac'
+
+# Example: call the Cloud Speech-to-Text API to transcribe an audio file
+def transcribe_file(speech_file):
+	client = speech.SpeechClient()
+
+	with io.open(speech_file, "rb") as audio_file:
+		content = audio_file.read()
+
+	audio = speech.RecognitionAudio(content=content)
+	config = speech.RecognitionConfig(
+		encoding=speech.RecognitionConfig.AudioEncoding.FLAC,
+		sample_rate_hertz=44100,
+		language_code="en-US",
+		audio_channel_count = 2,
+		model = "latest_short",
+		enable_word_time_offsets= True,
+	)
+
+	response = client.recognize(config=config, audio=audio)
+	response = json.loads(MessageToJson(response._pb))
+	
+	makeSubtitlesFile(response)
+
+def makeSubtitlesFile(response):
+	entries = []
+	contentBuffer = ""
+	window_s, window_f = -1, -1 
+	segment_duration = 0.18
+	index = 1
+	
+	for result in response.get("results"):
+		for word in result.get("alternatives")[0].get("words"):
+
+			start_time = getWordTime(word.get("startTime"))
+			end_time = getWordTime(word.get("endTime"))
+			content = word.get("word")
+
+			contentBuffer += content + " "
+
+			if end_time - start_time > 0.2:
+				start_time = end_time - 0.2
+			# Initializer
+			if window_s == -1:
+				window_s, window_f = start_time, start_time + segment_duration
+
+			if end_time > window_f:
+				entry = srt.Subtitle(index = index, start = datetime.timedelta(seconds=int(window_s),milliseconds=int((window_s - math.floor(window_s))*1000)),end = datetime.timedelta(seconds=int(end_time),milliseconds=int((end_time - math.floor(end_time))*1000)), content = contentBuffer)
+				entries.append(entry)
+				window_s, window_f = -1, -1
+				contentBuffer = ""
+				index += 1
+
+	subtitle_file = "./tateSubtitles.srt"
+
+	with open(subtitle_file, "w") as subtitle_file:
+		subtitle_file.write(srt.compose(entries))
+
+	return subtitle_file
+
+def generateVisualSubtitles(clipPath, subtitle_file):
+	subtitles = "subtitles={}:fontsdir='/usr/share/fonts/truetype/ubuntu':force_style='Alignment=10,FontName=Impacted,FontSize=32,PrimaryColour=&H00FFFFFF'".format(subtitle_file)
+	print(subtitles)
+	command = 'ffmpeg -i {} -vf "{}" -c:v libx264 -crf 18 -c:a copy -y tateOutput.mp4'.format(clipPath, subtitles)
+
+	os.system(command)
+	print("Successfully created video at tateOutput.mp4")
 
 """# User Action Required"""
 
@@ -188,7 +263,7 @@ downloadBackground(URLs)
 #@title URL Input
 # https://odysee.com/@tatespeech:c/superbike-vs-supercar:1
 link_url = input("Enter Odysee Link URL: ")
-backgroundPath = '/content/Forza-Horizon-4-DRIVING-LIKE-A-BOSS!!-1876HP-RTR-Mustang.mp4'
+backgroundPath = './Forza-Horizon-4-DRIVING-LIKE-A-BOSS!!-1876HP-RTR-Mustang.mp4'
 
 #@title User Actions From URL Input
 video_name = link_url.rsplit('/',1)[-1] + '.mp4'
@@ -202,108 +277,5 @@ getDOMTree(link_url,video_name)
 # Returns filepath of the video that contains the conjoined background .mp4 + Tate .mp4
 clipDir, clipPath = cropVideo(video_name,backgroundPath)
 
-# Create subtitles with AI
-audioToSubtitles(clipDir)
-
-"""# AI-Generated Subtitles"""
-
-audioToSubtitles('/content/superbike-vs-supercar:1')
-
-def audioToSubtitles(clipDir):
-  # Set the path to the DeepSpeech model files
-  model_path = "/path/to/deepspeech-0.9.3-models"
-
-  # Load the DeepSpeech model
-  model = deepspeech.Model(model_path + "/output_graph.pbmm")
-
-  # Set the beam width for the decoder
-  beam_width = 500
-
-  # Load the alphabet file
-  alphabet_path = model_path + "/alphabet.txt"
-  with open(alphabet_path, "r") as alphabet_file:
-      alphabet = alphabet_file.read()
-
-  # Set the language code
-  language_code = "en-US"
-
-  # Set the name of the input audio file
-  audio_file = clipDir + '/tateClip.mp4'
-
-  # Set the name of the output subtitle file
-  subtitle_file = clipDir + '/subtitles.srt'
-
-  # Extract the audio from the video file using FFmpeg
-  audio_stream, _ = (
-      ffmpeg
-      .input(audio_file)
-      .output("pipe:", format="s16le", acodec="pcm_s16le", ac=1, ar="16k")
-      .run(capture_stdout=True)
-  )
-
-  # Convert the audio stream to a NumPy array
-  audio = np.frombuffer(audio_stream, np.int16)
-
-  # Transcribe the audio using DeepSpeech
-  transcription = model.stt(audio, beam_width, language_code, alphabet)
-
-  # Split the transcription into segments based on the timing of the audio
-  segments = []
-
-  # Set the duration of each segment (in seconds)
-  segment_duration = 10
-
-  # Set the start time of the first segment
-  start_time = 0
-
-  # Set the end time of the first segment
-  end_time = start_time + segment_duration
-
-  # Split the transcription into segments
-  while start_time < len(audio) / 16000:
-      # Get the text for the current segment
-      segment_text = transcription[start_time:end_time]
-
-      # Add the segment to the list of segments
-      segments.append(segment_text)
-
-      # Set the start time of the next segment
-      start_time = end_time
-
-      # Set the end time of the next segment
-      end_time = start_time + segment_duration
-
-  # Create a list of SRT entries
-  entries = []
-
-  # Set the start time of the first entry
-  start_time = 0
-
-  # Set the end time of the first entry
-  end_time = segment_duration
-
-  # Create SRT entries for each segment
-  for segment in segments:
-      # Create a new SRT entry
-      entry = srt.Subtitle()
-
-      # Set the start and end times of the entry
-      entry.start = start_time
-      entry.end = end_time
-
-      # Set the text of the entry
-      entry.content = segment
-
-      # Add the entry to the list of entries
-      entries.append(entry)
-
-      # Set the start time of the next entry
-      start_time = end_time
-
-      # Set the end time of the next entry
-      end_time = start_time + segment_duration
-
-  # Save the entries to the output file
-  with open(subtitle_file, "w") as subtitle_file:
-      subtitle_file.write(srt.compose(entries))
+generateVisualSubtitles(clipPath, transcribe_file(mp4ToAudio(clipDir)))
 
