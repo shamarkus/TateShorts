@@ -27,7 +27,6 @@ from pytube import YouTube
 from google.protobuf.json_format import MessageToJson
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from apiclient.discovery import build
 from google.cloud import speech
 
 """# Downloading"""
@@ -86,9 +85,9 @@ def getDOMTree(link_url,video_name):
 
 def fix_timestamp(timestamp):
   # Use a regular expression to check if the timestamp starts with '00:'
-  if not re.match(r'^00:', timestamp):
-    # If the timestamp does not start with '00:', add it to the beginning
-    timestamp = '00:' + timestamp
+  pattern = r'^\d{2}:\d{2}$'
+  if re.match(pattern, timestamp):
+	  return '00:' + timestamp + '.000'
   return timestamp + '.000'
 
 """# Cropping"""
@@ -112,7 +111,7 @@ def cropVideo(video_name, backgroundPath):
   backgroundLength = getVideoLength(backgroundPath)
   vidLength = getVideoLength(f'{outputPath}/tateClip.mp4')
   
-  backgroundStart = getRandomNumber(30, backgroundLength - vidLength - 30)
+  backgroundStart = getRandomNumber(15, backgroundLength - vidLength - 15)
 
   command = ['ffmpeg', '-i', backgroundPath, '-copyinkf', '-ss', getHHMMSS(backgroundStart), '-to', getHHMMSS(backgroundStart + vidLength), '-vf', 'scale=1080:960,setsar=9/16', '-c:v', 'libx264', '-crf', '20', '-c:a', 'copy','-y', './background.mp4']
   subprocess.run(command)
@@ -150,7 +149,7 @@ def getVideoLength(video_path):
 
 def getMutedBackground(video_path):
   muted_video_path = './muted.mp4'
-  command = "ffmpeg -i " + video_path + " -c copy -an -y " + muted_video_path
+  command = "ffmpeg -i '{}' -c copy -an -y {}".format(video_path,muted_video_path) 
   print(command)
   try:
     os.system(command)
@@ -196,10 +195,10 @@ def transcribe_file(speech_file):
 	audio = speech.RecognitionAudio(content=content)
 	config = speech.RecognitionConfig(
 		encoding=speech.RecognitionConfig.AudioEncoding.FLAC,
-		sample_rate_hertz=44100,
+		sample_rate_hertz=48000,
 		language_code="en-US",
 		audio_channel_count = 2,
-		model = "latest_short",
+		model = "video",
 		enable_word_time_offsets= True,
 	)
 
@@ -212,30 +211,31 @@ def makeSubtitlesFile(response):
 	entries = []
 	contentBuffer = ""
 	window_s, window_f = -1, -1 
-	segment_duration = 0.18
+	segment_duration = 0.40
 	index = 1
 	
 	for result in response.get("results"):
-		for word in result.get("alternatives")[0].get("words"):
+		if "words" in result.get("alternatives")[0]:
+			for word in result.get("alternatives")[0].get("words"):
 
-			start_time = getWordTime(word.get("startTime"))
-			end_time = getWordTime(word.get("endTime"))
-			content = word.get("word")
+				start_time = getWordTime(word.get("startTime"))
+				end_time = getWordTime(word.get("endTime"))
+				content = word.get("word")
 
-			contentBuffer += content + " "
+				contentBuffer += content + " "
 
-			if end_time - start_time > 0.2:
-				start_time = end_time - 0.2
-			# Initializer
-			if window_s == -1:
-				window_s, window_f = start_time, start_time + segment_duration
+			#	if end_time - start_time > 0.3:
+			#		start_time = end_time - 0.3
+				# Initializer
+				if window_s == -1:
+					window_s, window_f = start_time, start_time + segment_duration
 
-			if end_time > window_f:
-				entry = srt.Subtitle(index = index, start = datetime.timedelta(seconds=int(window_s),milliseconds=int((window_s - math.floor(window_s))*1000)),end = datetime.timedelta(seconds=int(end_time),milliseconds=int((end_time - math.floor(end_time))*1000)), content = contentBuffer)
-				entries.append(entry)
-				window_s, window_f = -1, -1
-				contentBuffer = ""
-				index += 1
+				if end_time > window_f:
+					entry = srt.Subtitle(index = index, start = datetime.timedelta(seconds=int(window_s),milliseconds=int((window_s - math.floor(window_s))*1000)),end = datetime.timedelta(seconds=int(end_time),milliseconds=int((end_time - math.floor(end_time))*1000)), content = contentBuffer)
+					entries.append(entry)
+					window_s, window_f = -1, -1
+					contentBuffer = ""
+					index += 1
 
 	subtitle_file = "./tateSubtitles.srt"
 
@@ -257,15 +257,16 @@ def generateVisualSubtitles(clipPath, subtitle_file):
 #@title Video Game Backgrounds
 
 # Concatenate background Youtube links to this array
-URLs = ['https://youtu.be/9NgBLirYQS8']
+URLs = ['https://youtu.be/9NgBLirYQS8','https://www.youtube.com/watch?v=DHWcFozSFso','https://youtu.be/DTp8Ul82nYc']
 downloadBackground(URLs)
 
 #@title URL Input
 # https://odysee.com/@tatespeech:c/superbike-vs-supercar:1
+# https://odysee.com/@tatespeech:c/tate-on-talking-to-devices:1
 #link_url = input("Enter Odysee Link URL: ")
-link_url = "https://odysee.com/@tatespeech:c/superbike-vs-supercar:1"
+link_url = "https://odysee.com/@tatespeech:c/the-secrets-of-telegram:f"
 
-backgroundPath = './Forza-Horizon-4-DRIVING-LIKE-A-BOSS!!-1876HP-RTR-Mustang.mp4'
+backgroundPath = './GTA-5-🐸-Insane-Asphalt-Wavy-Ramp.mp4'
 
 #@title User Actions From URL Input
 video_name = link_url.rsplit('/',1)[-1] + '.mp4'
