@@ -3,3 +3,7 @@ pip install pytube
 pip install ffmpeg
 pip install srt
 pip install google
+pip install google-auth
+pip install google-speech
+pip install protobuf
+pip install google-cloud-speech
