@@ -46,6 +46,20 @@ def downloadAudios(URLs,soundType):
 def printFiles(dirPath):
 	print("\nFiles correspondent to directory " + dirPath + "\n" + os.listdir(path=dirPath))
 
+def getSeconds(timestamp):
+	dt = datetime.datetime.strptime(timestamp, "%M:%S")
+	return int(dt.minute*60 + dt.second)
+
+def getVideoLength(video_path):
+	command = ['ffprobe', '-v', 'fatal', '-show_entries', 'stream=width,height,r_frame_rate,duration', '-of', 'default=noprint_wrappers=1:nokey=1', video_path]
+	ffmpeg = subprocess.Popen(command, stderr=subprocess.PIPE,stdout = subprocess.PIPE )
+	out, err = ffmpeg.communicate()
+
+	if err:
+		print(err)
+	
+	return int((out.decode().split('\n')[3]).split('.')[0])
+
 def userSelections():
 
 	#Configure This Later
@@ -55,7 +69,7 @@ def userSelections():
 	printFiles("./backgroundMusic/")
 	backgroundPath = "./backgroundMusic/" + input("Enter Background Music Filename: ")
 
-	backgroundTime = input("Enter Background Music Start Time (MM:SS): ")
+	backgroundTime = getSeconds(input("Enter Background Music Start Time (MM:SS): "))
 	backgroundPower = int(input("Enter Background Music Volume (%): "))
 
 	printFiles("./SFX/")
@@ -75,8 +89,35 @@ def userSelections():
 
 	return videoPath, [backgroundPath, backgroundTime, backgroundPower], SFXInfo
 
+def getFFMPEGMix(videoPath,[backgroundPath, backgroundTime, backgroundPower], SFXInfo):
+	
+	# Get input command
+	# -i vidPath.mp4 -i bckgrnd.mp4 -i sfx1.mp4 -i sfx2.mp4 ... -i sfxn.mp4
+	inputCommand = "-i " + videoPath + " -i " + backgroundPath
+	for SFXPath, _ in SFXInfo:
+		inputCommand += " -i " + SFXPath
+	
+	vidLen = getVideoLength(videoPath)
+	n = SFXInfo.length
+	# Get filter_complex command
+	# filter_complex "[2] adelay=SFXTime*1000|SFXTime*1000 [n+2];
+	#		  [3] adelay=SFXTime*1000|SFXTime*1000 [n+3];
+	#		  ...
+	#		  [n+1] adelay=SFXTime*1000|SFXTime*1000 [n+n+1];
+	#		  [1] atrim=end=backgroundTime + vidLen - 0.2:atrim=start=backgroundTime:volume=float(backgroundPower/100) [a];
+	#		  [0][a][n+2][n+3]...[n+n+1]amix=inputs=n+2:duration=longest [audio_out]"
+	#		  -map 0:v -map "[audio_out]"
+	return inputCommand + filterCommand
+
+def mergeAudios(videoPath, backgroundInfo, SFXInfo):
+
+	command = "ffmpeg " + getFFMPEGMix(videoPath, backgroundInfo, SFXInfo) + " -y tateSFX.mp4" 
+	os.system(command)
+
+	print("Successfully created video at ./tateSFX.mp4")
+
 downloadAudios(backgroundMusic,0)
 downloadAudios(SFX,1)
 
-videoPath, backgroundInfo, SFXInfo  = userSelections()
-
+videoPath, backgroundInfo, SFXInfo = userSelections()
+mergeAudios(videoPath, backgroundInfo, SFXInfo)
