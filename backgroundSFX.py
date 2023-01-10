@@ -15,8 +15,8 @@ import io
 
 from pytube import YouTube
 
-backgroundMusic = ['https://www.youtube.com/watch?v=sqVARC8zTmY']
-SFX = ['https://www.youtube.com/watch?v=I1ab_WQ9gVY']
+backgroundMusic = ['https://youtu.be/phBThlPTBEg']
+SFX = ['https://www.youtube.com/watch?v=gfajflxbHUo','https://www.youtube.com/watch?v=2WWGVDR-7oM']
 
 # soundType = 0 --> BackgroundMusic	
 # soundType = 1 --> SFX	
@@ -107,7 +107,7 @@ def getFFMPEGMix(videoPath,backgroundPath, backgroundTime, backgroundPower, SFXI
 		inputCommand += " -i " + SFXPath
 	
 	vidLen = getVideoLength(videoPath)
-	n = SFXInfo.length
+	n = len(SFXInfo)
 
 	filterCommand = "" 
 	factorialSection = "[0][a]"
@@ -116,7 +116,7 @@ def getFFMPEGMix(videoPath,backgroundPath, backgroundTime, backgroundPower, SFXI
 		filterCommand += "[{}] adelay={}|{} [{}];".format(str(inc),str(SFXTime * 1000),str(SFXTime * 1000),str(n + inc))
 		factorialSection += "[{}]".format(str(n+inc))
 		inc += 1
-	filterCommand += "[1] atrim=end={}:atrim=start={}:volume={} [a];".format(str(backgroundTime + vidLen - 0.2),str(backgroundTime),str(float(backgroundPower/100)))
+	filterCommand += "[1] atrim=start={}:end={}, volume={} [a];".format(str(backgroundTime),str(backgroundTime + vidLen - 0.2),str(float(backgroundPower/100)))
 	filterCommand += "{} amix=inputs={}:duration=longest [audio_out]".format(factorialSection,n + 2)
 	
 	fullCommand = '{} -filter_complex "{}" -map 0:v -map "[audio_out]"'.format(inputCommand, filterCommand)
