@@ -4,7 +4,7 @@
 Shorts are videos that range between 15-60 seconds, and have an aspect ratio that is optimized for mobile phone usage (9:16).
 Andrew Tate Shorts in partciular have several add on features, such as half of the screen being a dynamic video-game object. This is to ensure the audience's short attention span. Additionally, there is the inclusion of subtitles, background music, and sound effects (SFX).
 
-![Screenshot of a posted video](./Tate2.jpg)
+![Screenshot of a posted video](./Tate2.JPG)
 
 ## Installation
 
@@ -29,7 +29,7 @@ SFX = ['https://www.youtube.com/watch?v=gfajflxbHUo','https://www.youtube.com/wa
 - Afterwards, check tateSubtitles.srt to make sure Google's speech-to-text performed an accurate transcript
 - Run './generateVideo.py'
 - Run './backgroundSFX.py and select what music & SFX you want at any correspondent timestamp'
-![Example of Output](./Tate3.jpg)
+![Example of Output](./Tate3.JPG)
     
 ## Environment Variables
 
