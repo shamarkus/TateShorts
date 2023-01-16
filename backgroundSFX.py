@@ -15,8 +15,8 @@ import io
 
 from pytube import YouTube
 
-backgroundMusic = ['https://youtu.be/phBThlPTBEg']
-SFX = ['https://www.youtube.com/watch?v=gfajflxbHUo','https://www.youtube.com/watch?v=2WWGVDR-7oM']
+backgroundMusic = ['https://youtu.be/phBThlPTBEg','https://youtu.be/W4VTq0sa9yg']
+SFX = ['https://www.youtube.com/watch?v=gfajflxbHUo','https://www.youtube.com/watch?v=2WWGVDR-7oM','https://www.youtube.com/watch?v=H9CWQaMYXiI','https://www.youtube.com/watch?v=4PTY8jNeOas','https://www.youtube.com/watch?v=VXwBY_dv2Qo']
 
 # soundType = 0 --> BackgroundMusic	
 # soundType = 1 --> SFX	
@@ -42,6 +42,13 @@ def downloadAudios(URLs,soundType):
 			video_stream = yt.streams.get_audio_only()
 			print(video_stream)
 			video_stream.download(output_path=dirPath,filename=title + '.mp4')
+
+			if soundType==1:
+				command = 'ffmpeg -i {}/{}.mp4 -af silenceremove=1:0:-50dB {}/buffer.mp4'.format(dirPath,title,dirPath)
+				os.system(command)
+				os.system('rm {}/{}.mp4'.format(dirPath,title))
+				os.system('mv {}/buffer.mp4 {}/{}.mp4'.format(dirPath,dirPath,title))
+
 			print("Background/SFX " + title + " --> Successfully Downloaded")
 def printFiles(dirPath):
 	print("\nFiles correspondent to directory " + dirPath)
